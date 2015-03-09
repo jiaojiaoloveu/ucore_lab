@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 介绍(2015)
 
 ucore OS是用于清华大学计算机系本科操作系统课程的OS教学试验内容。
@@ -214,3 +215,7 @@ S郭晓林、薛天凡、胡刚、刘超、粟裕、袁昕颢...
 
 如果你发现了问题，有好的建议或意见,请给 yuchen AT tsinghua.edu.cn 发电邮；
 如果你完成这8个实验，且对进一步探索、研究、研发操作系统感兴趣，请给 yuchen AT tsinghua.edu.cn 发电邮，欢迎加入我们的OS兴趣小组，共同进步！
+=======
+# ucore_lab
+tsinghua os ucore
+>>>>>>> f6fa48460abdb0842fba2ac892eb94e1938da400
