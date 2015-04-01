@@ -1,1 +1,129 @@
-jiaojiao' test
+# Lab2 report
+
+## [练习1]
+实现 first-fit 连续物理内存分配算法
+
+1-0 设计实现过程
+```
+根据first-fit算法以及注释中的提示，仔细阅读default_init default_init_memmap default_alloc_pages
+
+default_free_pages中的代码，并理解各个函数的含义与作用，然后修改default_alloc_pages完成此项练习。
+
+```
+1-1 你的first fit算法是否有进一步的改进空间？
+```
+可以适当建立索引，用于分配和释放时加速定位。
+default_free_pages函数可以把两次循环合并到一起，但要考虑更多情况。
+
+```
+
+## [练习2]
+实现寻找虚拟地址对应的页表项
+
+2-0 设计实现过程
+```
+按照注释中给出的步骤修改完成get_pte函数。
+
+	第一步,定位pdt后通过la中的PDX偏移找到对应的PDE	
+		pde_t *pdep = pgdir + PDX(la);  		 // (1) find page directory entry
+	第二步,如果Flag中的Present为0或者pdep为空指针,即对应page table不存在,需要进行相应的分配
+		pte_t *ptep = NULL;
+		if (!(*pdep & PTE_P)) {         		 // (2) check if entry is not present
+	第三步,如果传入create是FALSE,那么不需要create,此时直接返回NULL;然后通过alloc创建page,排除失败的情况返回NULL;	
+			if(!create)	return ptep;		 // (3) check if creating is needed, then alloc page for page table
+			struct Page *page = alloc_page();	 // CAUTION: this page is used for page table, not for common data page	
+			if(!page) return ptep;
+	第四步,根据题设,需要设置ref为1表示页面状态
+			set_page_ref(page,1);			 // (4) set page reference
+	第五步,调用page2pa得到page相应的线性地址
+			uintptr_t pa = page2pa(page);		 // (5) get linear address of page
+	第六步,将新分配的page清空内容
+			memset(KADDR(pa),0,PGSIZE);              // (6) clear page content using memset
+	第七步,在pa得到的线性地址传给pde,并且设定权限
+			*pdep = pa | PTE_U | PTE_W | PTE_P;  	 // (7) set page directory entry's permission
+		}
+	第八步,通过映射得到的pte基址,然后加上偏移得到pte,进行返回
+		ptep = KADDR(PDE_ADDR(*pdep));
+		ptep += PTX(la);
+		return ptep;					 // (8) return page table entry
+```
+2-1 请描述页目录项（Pag Director Entry）和页表（Page Table Entry）中每个组成部分的含义和以及对ucore而言的潜在用处。
+```
+	首先是lab1中断相关,得到相应的中断,准备好中断栈,如果需要则设置好权限,
+		#define T_PGFLT                 14  // page fault
+	进入中断执行段.如果再次缺失,则会发出double fault.如果顺利会将需要的页换进内存(调用相关算法后),调用page_remove,page_insert(会继续调用get_pte),然后返回新的页.
+```
+2-2 如果ucore执行过程中访问内存，出现了页访问异常，请问硬件要做哪些事情？
+```
+	会出现
+		#define T_DBLFLT                8   // double fault
+	的异常后退出系统.
+```
+
+## [练习3]
+释放某虚地址所在的页并取消对应二级页表项的映射
+
+3-0 设计实现过程
+```
+	按照注释中给出的步骤修改完成page_remove_pte函数。
+	(1)和练习2一样.
+		if (*ptep & PTE_P) {                          //(1) check if this page table entry is present
+	(2)找到对应page.提示中的相关函数已经实现好.
+			struct Page *page = pte2page(*ptep);  //(2) find corresponding page to pte
+	(3)减少ref.提示中的相关函数已经实现好.
+			page_ref_dec(page);                   //(3) decrease page reference
+	(4)如果ref为0,freepage.提示中的相关函数已经实现好.
+			if(!page_ref(page)) free_page(page);  //(4) and free this page when page reference reachs 0
+	(5)清空pte表项.
+			*ptep = 0;                            //(5) clear second page table entry
+	(6)tlb中删除相关表项.提示中的相关函数已经实现好.
+			tlb_invalidate(pgdir, la);            //(6) flush tlb
+		}
+```
+3-1 数据结构Page的全局变量（其实是一个数组）的每一项与页表中的页目录项和页表项有无对应关系？如果有，其对应关系是啥？
+```
+	指的应该是
+		structPage *pages
+	有,在page_init函数中有对pages频繁操作,甚至还进行遍历(npage)的过程.而
+		npage = maxpa / PGSIZE;
+		pages = (struct Page *)ROUNDUP((void *)end, PGSIZE);
+	npage是与最大的物理内存相关,ends是bootloader结束标志,通过ROUNDUP找到第一张可以使用的页,
+		for (i = 0; i < npage; i ++) {
+			SetPageReserved(pages + i);
+		}
+	对其进行标志Reserved,说明是给内核态使用的空间.而,
+		uintptr_t freemem = PADDR((uintptr_t)pages + sizeof(struct Page) * npage);
+	之上的为空闲页.终上可以知道,pages指向的是可管理的物理内存空间的起始页,和pde,pte的关系就是,通过查询pde,pte之后再加上偏移得到是KADDR,即虚地址物理地址减去0xC0000000.
+```
+3-2 如果希望虚拟地址与物理地址相等，则需要如何修改lab2，完成此事？
+```
+	可以在pmm.h中发现两个转换的定义分别为
+		#define PADDR(kva) ({                                                   \
+			uintptr_t __m_kva = (uintptr_t)(kva);                       \
+			if (__m_kva < KERNBASE) {                                   \
+				panic("PADDR called with invalid kva %08lx", __m_kva);  \
+			}                                                           \
+			__m_kva - KERNBASE;                                         \
+		})
+		#define KADDR(pa) ({                                                    \
+			uintptr_t __m_pa = (pa);                                    \
+			size_t __m_ppn = PPN(__m_pa);                               \
+			if (__m_ppn >= npage) {                                     \
+				panic("KADDR called with invalid pa %08lx", __m_pa);    \
+			}                                                           \
+			(void *) (__m_pa + KERNBASE);                               \
+		})
+	只需要分别改变最后返回的值去掉KERNBASE,不再进行+/-KERNBASE就可以得到相等的pa和kva.
+```
+## 与参考答案的区别：
+```
+  1. 参考答案的first-fit算法效率很低，一块100页的空间，它在链表里有100项，而我只需要存一项，在分配和释放时再做处理，可以极大加快查找时间。
+  2. 我做了代码复用，移除了`default_init_memmap`函数，因为它的功能可以由`default_free_pages`代替，而且支持init多块的情况。移除一个函数还能减小操作系统内核大小。
+```
+## 重要的知识点
+```
+first-fit算法。。
+系统中的物理内存;
+建立对物理内存的初步管理;
+了解页表相关的操作;
+```
