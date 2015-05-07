@@ -1,7 +1,4 @@
 file obj/bootblock.o
 target remote :1234
-set architecture i8086
-b bootmain
-b *0x7c00
+break bootmain
 continue
-x /10i $pc

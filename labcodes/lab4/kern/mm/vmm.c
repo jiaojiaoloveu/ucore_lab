@@ -167,8 +167,6 @@ check_vmm(void) {
     check_vma_struct();
     check_pgfault();
 
- //   assert(nr_free_pages_store == nr_free_pages());
-
     cprintf("check_vmm() succeeded.\n");
 }
 
@@ -229,8 +227,6 @@ check_vma_struct(void) {
 
     mm_destroy(mm);
 
-//    assert(nr_free_pages_store == nr_free_pages());
-
     cprintf("check_vma_struct() succeeded!\n");
 }
 
@@ -267,7 +263,7 @@ check_pgfault(void) {
     assert(sum == 0);
 
     page_remove(pgdir, ROUNDDOWN(addr, PGSIZE));
-    free_page(pa2page(pgdir[0]));
+    free_page(pde2page(pgdir[0]));
     pgdir[0] = 0;
 
     mm->pgdir = NULL;
